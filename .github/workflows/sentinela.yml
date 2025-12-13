@@ -2,8 +2,8 @@ name: Sentinela Ativo (Robô de Alerta)
 
 on:
   schedule:
-    - cron: '0 */3 * * *'  # Roda a cada 3 horas automaticamente
-  workflow_dispatch:       # Permite rodar manualmente para teste
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
 
 jobs:
   vigilia:
@@ -20,9 +20,15 @@ jobs:
       - name: Instalar Dependências
         run: pip install -r requirements.txt
 
+      - name: Raio-X (Debug)
+        run: |
+          echo "📂 Listando arquivos na pasta src:"
+          ls -R src
+
       - name: Executar Sentinela
         env:
           NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python -m src.alert
+        # MUDANÇA AQUI: Usamos caminho de arquivo (/) em vez de ponto (.)
+        run: python src/alert.py
