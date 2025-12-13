@@ -1,3 +1,7 @@
+
+# Arquivo de Alerta Ativo).
+
+
 import os
 import requests
 import pandas as pd
