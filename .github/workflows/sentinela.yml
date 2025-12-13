@@ -31,4 +31,4 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         # MUDANÇA AQUI: Usamos caminho de arquivo (/) em vez de ponto (.)
-        run: python src/alert.py
+        run: python -m src.alert
