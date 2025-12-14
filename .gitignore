@@ -1,7 +1,22 @@
+# --- Lixo do Sistema e Python (Padrão) ---
 venv/
 __pycache__/
 .env
-data/
-*.csv
-*.shp
-*.cbm
+.DS_Store
+
+# --- BLOQUEIO GERAL DE DADOS ---
+# Bloqueia tudo dentro da pasta data
+data/*
+
+# --- EXCEÇÕES (O que PODE subir) ---
+# O sinal "!" libera o arquivo
+!data/sample_dados_brutos.csv
+!data/resultados_validacao_metricas.csv
+!data/FRP_diario.csv
+
+# Se o arquivo do INPE for pequeno (<50MB), libere ele aqui também:
+# !data/nome_do_seu_arquivo_inpe.csv
+
+# --- CÉREBRO DA IA (NÃO BLOQUEAR) ---
+# Nunca ignore o .cbm, senão o robô fica sem cérebro na nuvem!
+!*.cbm
