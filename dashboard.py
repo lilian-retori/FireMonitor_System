@@ -3,6 +3,7 @@ import pandas as pd
 import pydeck as pdk
 import io
 import os
+import requests # <--- Biblioteca necessária para o Telegram
 
 # 1. Configuração da Página
 st.set_page_config(
@@ -11,7 +12,20 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. Dados "Chumbados" (Solução Nuclear para o TCC)
+# ==========================================
+# FUNÇÕES DE BACKEND (Telegram e Dados)
+# ==========================================
+
+def enviar_telegram(token, chat_id, mensagem):
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = {"chat_id": chat_id, "text": mensagem}
+        response = requests.post(url, data=data)
+        return response.json()
+    except Exception as e:
+        return {"ok": False, "description": str(e)}
+
+# Dados "Chumbados" para garantir funcionamento na apresentação
 DADOS_EMERGENCIA = """latitude,longitude,datahora,frp,estado,municipio
 -22.905,-47.061,2024-08-25,15.5,SAO PAULO,CAMPINAS
 -21.170,-47.810,2024-08-25,22.1,SAO PAULO,RIBEIRAO PRETO
@@ -31,32 +45,46 @@ DADOS_EMERGENCIA = """latitude,longitude,datahora,frp,estado,municipio
 
 @st.cache_data
 def carregar_dados():
-    # Tenta ler arquivo local primeiro (seu PC)
     arquivo_local = "data/focos_br_todos-sats_2024.csv"
-    
     if os.path.exists(arquivo_local):
         return pd.read_csv(arquivo_local)
     else:
-        # Se falhar (Nuvem), usa os dados chumbados acima
-        st.warning("⚠️ Modo de Apresentação (Dados Embarcados)")
         return pd.read_csv(io.StringIO(DADOS_EMERGENCIA))
 
 # ==========================================
-# 3. INTERFACE PRINCIPAL
+# INTERFACE PRINCIPAL
 # ==========================================
 st.title("🔥 Sistema Sentinela: Monitoramento de Queimadas (SP)")
 st.markdown("---")
 
+# --- BARRA LATERAL (Configuração do Bot) ---
+st.sidebar.header("📡 Configuração de Alertas")
+st.sidebar.info("Insira as credenciais para ativar o envio.")
+bot_token = st.sidebar.text_input("Token do Bot (Telegram)", type="password")
+chat_id = st.sidebar.text_input("Chat ID (Seu ID)")
+
+# Botão de Teste Manual
+if st.sidebar.button("🔔 Testar Disparo Manual"):
+    if bot_token and chat_id:
+        resp = enviar_telegram(bot_token, chat_id, "🚨 TESTE: O Sistema Sentinela está ativo e monitorando SP!")
+        if resp.get("ok"):
+            st.sidebar.success("Mensagem enviada!")
+        else:
+            st.sidebar.error(f"Erro: {resp}")
+    else:
+        st.sidebar.warning("Preencha o Token e o Chat ID primeiro.")
+
+# --- LÓGICA DO DASHBOARD ---
 df = carregar_dados()
 
 if not df.empty:
-    # Garante colunas numéricas
     df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
     df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
     df = df.dropna(subset=['latitude', 'longitude'])
 
-    # --- FILTRO ---
-    st.sidebar.header("Filtros")
+    # Filtros
+    st.sidebar.markdown("---")
+    st.sidebar.header("Filtros de Mapa")
     cidades = df['municipio'].unique()
     sel_cidade = st.sidebar.multiselect("Município", cidades, default=cidades)
     
@@ -65,39 +93,37 @@ if not df.empty:
     else:
         df_filtrado = df
 
-    # --- KPI's ---
+    # KPI's
     col1, col2, col3 = st.columns(3)
-    col1.metric("Focos Ativos", len(df_filtrado))
+    qtd_focos = len(df_filtrado)
+    col1.metric("Focos Ativos", qtd_focos)
     col2.metric("Intensidade Máx (FRP)", f"{df_filtrado['frp'].max():.1f}")
-    col3.metric("Status", "Crítico" if len(df_filtrado) > 5 else "Normal")
-
-    # --- MAPA (Focado em SP) ---
-    st.subheader("📍 Monitoramento em Tempo Real")
     
+    status = "Crítico" if qtd_focos > 5 else "Normal"
+    col3.metric("Status", status)
+
+    # --- LÓGICA AUTOMÁTICA DE ALERTA ---
+    # Se o status for crítico E o usuário preencheu o bot, avisa automaticamente
+    if status == "Crítico" and bot_token and chat_id:
+        if st.button("⚠️ ALERTA: Situação Crítica Detectada - ENVIAR RELATÓRIO"):
+            msg = f"🚨 ALERTA DE INCÊNDIO (SP)\n\nSituação: CRÍTICA\nFocos Ativos: {qtd_focos}\nCidades Afetadas: {', '.join(df_filtrado['municipio'].unique()[:3])}..."
+            enviar_telegram(bot_token, chat_id, msg)
+            st.success("Relatório de crise enviado para a Defesa Civil (Telegram).")
+
+    # MAPA
+    st.subheader("📍 Monitoramento em Tempo Real")
     layer = pdk.Layer(
         "ScatterplotLayer",
         data=df_filtrado,
         get_position=['longitude', 'latitude'],
         get_color=[255, 50, 50, 200],
-        get_radius=15000, # Raio grande para ver bem no mapa
+        get_radius=15000,
         pickable=True
     )
-
-    view_state = pdk.ViewState(
-        latitude=-22.5,
-        longitude=-48.0,
-        zoom=6,
-        pitch=40
-    )
-
-    r = pdk.Deck(
-        layers=[layer],
-        initial_view_state=view_state,
-        tooltip={"text": "{municipio}\nFRP: {frp}"}
-    )
+    view_state = pdk.ViewState(latitude=-22.5, longitude=-48.0, zoom=6, pitch=40)
+    r = pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{municipio}\nFRP: {frp}"})
     st.pydeck_chart(r)
     
-    # --- DADOS ---
     with st.expander("Ver Dados Brutos"):
         st.dataframe(df_filtrado)
 
